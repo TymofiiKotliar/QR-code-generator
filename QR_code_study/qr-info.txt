@@ -1,0 +1,7 @@
+21x21 - dimensions
+EC + mask info: 
+	- raw: 10001100 1111110
+	- XOR-ed: 10 010 01101100
+	- EC: 10 = H
+	- Mask: 010 = 2
+	- BCH: 01101100

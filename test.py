@@ -54,5 +54,6 @@ def score():
 
         if diff == 0:
             print(f"Found the match! Diff = {diff}, params: {params}")
+            qr.save("matching_params.png")
 
 score()
