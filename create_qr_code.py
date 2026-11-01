@@ -1,21 +1,47 @@
+import os
+import requests
+from flask import Flask, request, abort
 import segno
-import datetime
 import io
 from PIL import Image, ImageDraw, ImageFont
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 PARAMS = {'error': 'Q', 'mask': 2, 'mode': 'numeric'}
-OUT = io.BytesIO()
 SCALE, BORDER = 10, 4
 
-def get_payload():
-    payload = datetime.datetime.now()
-    return f"{payload.year}{payload.month}{payload.day}"
+TOKEN = os.environ["BOT_TOKEN"]
+SECRET = os.environ["WEBHOOK_SECRET"]
+ALLOWED = {int(x) for x in os.environ["ALLOWED_IDS"].split(",")}
+API = f"https://api.telegram.org/bot{TOKEN}"
 
-def generate_and_save_qr(payload, error="Q", version=1, mode="numeric", mask=2, save=False, boost_error=False):
-    segno.make_qr(payload, error, version, mode, mask, boost_error=False).save(OUT, scale=SCALE, border=BORDER, kind='png')
+app = Flask(__name__)
+
+@app.post("/webhook")
+def webhook():
+    if request.headers.get("X-Telegram-Bot-Api-Secret-Token") != SECRET:
+        abort(403)
+
+    msg = (request.get_json(silent=True) or {}).get("message") or {}
+    sender = msg.get("from", {}).get("id")
+    text = msg.get("text", "")
+
+    if sender in ALLOWED and text.startswith("/qr"):
+        requests.post(
+            f"{API}/sendPhoto",
+            data={"chat_id": msg["chat"]["id"]},
+            files={"photo": ("qr.png", generate_qr(), "image/png")},
+            timeout=10,
+        )
+    return "ok"
+
+def generate_qr(error="Q", version=1, mode="numeric", mask=2, boost_error=False) -> io.BytesIO:
+    bytes_img = io.BytesIO()
+    payload = datetime.now(ZoneInfo("Europe/Bratislava")).strftime("%Y%m%d")
+    segno.make_qr(payload, error, version, mode, mask, boost_error=False).save(bytes_img, scale=SCALE, border=BORDER, kind='png')
     
-    OUT.seek(0)
-    img = Image.open(OUT)
+    bytes_img.seek(0)
+    img = Image.open(bytes_img)
     d = ImageDraw.Draw(img)
     
     
@@ -26,6 +52,7 @@ def generate_and_save_qr(payload, error="Q", version=1, mode="numeric", mask=2, 
     font = ImageFont.load_default(size=int(2 * SCALE))
     d.text(((x0 + x1) / 2, (y0 + y1) / 2), "WC", fill="black", font=font, anchor="mm", stroke_width=1, stroke_fill="black")
     
-    img.save("QR_out/replica-qr.png")
-
-generate_and_save_qr(payload=get_payload(), save=True)
+    output = io.BytesIO()
+    img.save(output, "PNG")
+    output.seek(0)
+    return output
